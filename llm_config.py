@@ -195,43 +195,47 @@ def extract_context_llama(row, row_idx, total_rows, max_retries=5):
     return extract_context_rule_based(row)
 
 
-# Rule-based feature extraction
-def extract_context_rule_based(row):
-    text = f"{row.get('description_heading', '')} {row.get('description_content', '')} {row.get('features', '')}".lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    minutes_match = re.search(r'(\d+\.?\d*)\s*(minute|min)', text)
-    proximity_minutes = float(minutes_match.group(1)) if minutes_match else (5.0 if any(w in text for w in ['close to', 'nearby', 'walking distance']) else 0.0)
-    proximity_km = 1.0 if any(w in text for w in ['close to', 'nearby', 'walking distance']) else 0.0
-    near_shops = 1 if any(w in text for w in ['shops', 'shopping', 'supermarket', 'retail']) else 0
-    near_transport = 1 if any(w in text for w in ['transport', 'train station', 'bus', 'tram']) else 0
-    near_schools = 1 if any(w in text for w in ['schools', 'school', 'college']) else 0
-    is_quiet = 1 if any(w in text for w in ['quiet', 'peaceful', 'tranquil']) else 0
-    is_busy = 1 if any(w in text for w in ['busy', 'vibrant', 'bustling']) else 0
-    is_central = 1 if any(w in text for w in ['central', 'heart of']) else 0
-    has_view = 1 if any(w in text for w in ['view', 'views', 'scenic', 'ocean', 'park', 'lakeview']) else 0
-    north_facing = 1 if 'north facing' in text else 0
-    urgency_level = 2 if any(w in text for w in ['must sell', 'quick sale']) else 1 if any(w in text for w in ['urgent', 'immediate']) else 0
-    is_recently_renovated = 1 if any(w in text for w in ['renovated', 'updated', 'modern', 'opulent', 'luxury']) else 0
-    is_new = 1 if any(w in text for w in ['new', 'brand new']) else 0
-    is_old = 1 if any(w in text for w in ['old', 'older', 'heritage']) else 0
-    has_luxury_finishes = 1 if any(w in text for w in ['luxury', 'premium', 'high-end']) else 0
-    sale_season = row.get('sold_date', '')
-    if sale_season:
+_FALLBACK_KEYWORDS = {
+    "near_shops": ["shops", "shopping", "supermarket", "retail", "mall"],
+    "near_transport": ["transport", "train", "station", "bus", "tram", "metro", "ferry"],
+    "near_schools": ["school", "college", "university", "campus"],
+    "near_parks": ["park", "reserve", "greenery", "playground"],
+    "near_water": ["beach", "river", "lake", "ocean", "waterfront", "canal", "seaside"],
+    "near_cbd": ["cbd", "city centre", "city center", "downtown", "business district"],
+    "quiet": ["quiet", "peaceful", "tranquil", "serene", "private"],
+    "busy": ["busy", "vibrant", "bustling", "lively"],
+    "central": ["central", "heart of", "inner city", "inner-city"],
+    "has_view": ["view", "views", "scenic", "outlook", "skyline"],
+    "north_facing": ["north facing", "north-facing", "northerly"],
+    "recently_renovated": ["renovated", "updated", "refurbished", "modern", "contemporary"],
+    "new_build": ["brand new", "newly built", "new home", "near new"],
+    "period_or_old": ["older", "period", "heritage", "original condition"],
+    "luxury_finishes": ["luxury", "premium", "high-end", "high end", "designer", "opulent"],
+    "outdoor_space": ["garden", "yard", "courtyard", "balcony", "deck", "terrace", "patio", "alfresco"],
+    "parking": ["garage", "carport", "parking", "off-street", "off street"],
+    "family_friendly": ["family", "families", "child", "kids"],
+    "investment_appeal": ["investment", "investor", "rental", "tenant", "yield"],
+    "development_potential": ["subdivide", "subdivision", "dual occupancy", "duplex", "stca"],
+    "energy_efficient": ["solar", "energy rating", "energy-efficient", "sustainable", "double glazing"],
+    "move_in_ready": ["move in ready", "move-in ready", "turnkey", "nothing to do"],
+    "needs_work": ["renovator", "fixer", "needs work", "potential to improve", "tlc"],
+    "security_features": ["gated", "secure", "alarm", "intercom", "cctv"],
+    "spacious": ["spacious", "generous", "expansive", "large", "roomy"],
+}
+
+
+def fallback_extract_features(text: str) -> dict:
+    t = re.sub(r"[^\w\s]", " ", str(text).lower())
+    out = {}
+    for feat, kws in _FALLBACK_KEYWORDS.items():
+        if any(w in t for w in kws):
+            out[feat] = 1.0
+    m = re.search(r"(\d+\.?\d*)\s*(minute|min)\b", t)
+    if m:
         try:
-            sale_month = pd.to_datetime(sale_season, format='%a %d-%b-%y', errors='coerce').month
-            sale_season = (
-                'spring' if sale_month in [9, 10, 11] else
-                'summer' if sale_month in [12, 1, 2] else
-                'fall' if sale_month in [3, 4, 5] else
-                'winter' if sale_month in [6, 7, 8] else
-                'none'
-            )
-        except:
-            sale_season = 'none'
-    else:
-        sale_season = 'none'
-    return [
-        proximity_minutes, proximity_km, near_shops, near_transport, near_schools,
-        is_quiet, is_busy, is_central, has_view, north_facing, urgency_level,
-        is_recently_renovated, is_new, is_old, has_luxury_finishes, sale_season
-    ]
+            out["proximity_minutes"] = float(m.group(1))
+        except ValueError:
+            pass
+    if any(w in t for w in ["must sell", "quick sale", "mortgagee", "urgent", "deceased estate"]):
+        out["urgent_sale"] = 1.0
+    return out
