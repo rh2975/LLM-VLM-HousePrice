@@ -74,27 +74,29 @@ def extract_context_llama(row, row_idx, total_rows, max_retries=5):
         sale_season = 'none'
     
     prompt = f"""
-    **INSTRUCTIONS**: Output ONLY a single JSON object with the specified fields based on the provided description. Do NOT include any examples, explanations, or extra text. Use 0 or 'none' for unknown values. Ensure the JSON is valid and contains exactly the fields listed below.
+        You are an expert real-estate analyst. You read a property Listing Description
+        from ANY country, market, or writing style and identify the KEY spatio-temporal
+        and contextual features that influence the property's value.
+        
+        You are NOT being given a predefined list of features. Decide and extract which
+        attributes are salient in each description. Consider only these two families:
+        - Spatio-temporal: location relative to amenities and landmarks (shops, public
+          transport, schools, parks, water, city, employment hubs), proximity and
+          accessibility, orientation/aspect, time in market context, etc.
+        - Contextual: condition, age, build quality, prestige, ambiance, layout and
+          space, indoor/outdoor features, suitability, seller intent, etc.
+        
+        Rules for the JSON output:
+        - Output ONLY a single flat JSON object. Keys are concise canonical
+          feature names; values are numbers.
+        - Use 1 for a present/true qualitative attribute. Use an actual number for a
+          quantity (e.g. minutes, kilometres, counts).
+        - Reuse the SAME canonical name for the same concept across different listings
+          (e.g. always "near_station", never "close_to_station" in one and
+          "station_nearby" in another) so features are compatible.
+        - Prefer widely-applicable names over one-off phrases.
 
-    **Fields**:
-    - proximity_minutes (float): Minutes to nearest amenity (5.0 for "close to" or "nearby", 0.0 if not mentioned).
-    - proximity_km (float): Kilometers to nearest amenity (1.0 for "close to" or "nearby", 0.0 if not mentioned).
-    - near_shops (int): 1 if close to shops, 0 otherwise.
-    - near_transport (int): 1 if close to transport, 0 otherwise.
-    - near_schools (int): 1 if close to schools, 0 otherwise.
-    - is_quiet (int): 1 if described as quiet or peaceful, 0 otherwise.
-    - is_busy (int): 1 if described as busy or vibrant, 0 otherwise.
-    - is_central (int): 1 if described as central or in the heart of an area, 0 otherwise.
-    - has_view (int): 1 if mentions view, views, scenic, ocean, park, or lakeview, 0 otherwise.
-    - north_facing (int): 1 if described as north-facing, 0 otherwise.
-    - urgency_level (int): 0 (none), 1 (urgent or immediate), 2 (must sell or quick sale).
-    - is_recently_renovated (int): 1 if described as renovated, updated, or modern, 0 otherwise.
-    - is_new (int): 1 if described as new or brand new, 0 otherwise.
-    - is_old (int): 1 if described as old or older, 0 otherwise.
-    - has_luxury_finishes (int): 1 if described as luxury, premium, or high-end, 0 otherwise.
-    - sale_season (str): "spring", "summer", "fall", "winter", or "none". Use: {sale_season}.
-
-    **Description**: {text}
+    **Listing Description**: {text}
     """
     
     for attempt in range(max_retries):
